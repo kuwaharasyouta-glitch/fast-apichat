@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-jose
+pydantic
+email-validator
+sqlalchemy
+aiosqlite
+python-multipart
