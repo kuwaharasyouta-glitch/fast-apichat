@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <title>チャットアプリ 認証・ユーザー管理演習</title> <!-- タイトルタグの閉じタグを修正 -->
+  <style>
+    /* 簡単なスタイル */
+    #chat-container {
+      display: none;
+    }
+
+    #messagesArea {
+      height: 300px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      overflow-y: auto;
+    }
+
+    .message {
+      margin-bottom: 10px;
+    }
+
+    .system-message {
+      color: #666;
+      font-style: italic;
+    }
+
+    .error-message {
+      color: red;
+    }
+
+    .user-message {
+      text-align: right;
+      color: blue;
+    }
+
+    .other-message {
+      text-align: left;
+      color: green;
+    }
+
+    .ai-message {
+      text-align: left;
+      color: purple;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>チャットアプリ 認証・ユーザー管理演習</h1>
+
+  <!-- ログインフォーム -->
+  <div id="login-container">
+    <h2>ログイン</h2>
+    <form id="login-form">
+      <input type="text" id="username" placeholder="ユーザー名" required>
+      <input type="password" id="password" placeholder="パスワード" required>
+      <button type="submit">ログイン</button>
+    </form>
+    <p><a href="#" id="show-register">新規登録はこちら</a></p>
+  </div>
+
+  <!-- ユーザー登録フォーム -->
+  <div id="register-container" style="display: none;">
+    <h2>新規登録</h2>
+    <form id="register-form">
+      <input type="text" id="reg-username" placeholder="ユーザー名" required>
+      <input type="email" id="reg-email" placeholder="メールアドレス" required>
+      <input type="password" id="reg-password" placeholder="パスワード" required>
+      <button type="submit">登録</button>
+    </form>
+    <p><a href="#" id="show-login">ログインに戻る</a></p>
+  </div>
+
+  <!-- チャット画面 -->
+  <div id="chat-container">
+    <div id="user-info">
+      <span id="logged-in-user"></span> <!-- ログインユーザー表示要素を追加 -->
+    </div>
+    <button id="logout-btn">ログアウト</button>
+    <div id="messagesArea"></div>
+    <input type="text" id="messageInput" placeholder="メッセージを入力...">
+    <button id="sendButton">送信</button>
+  </div>
+
+<script src="/static/script.js"></script>
+
+</body>
+
+</html>

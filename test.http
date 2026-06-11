@@ -1,0 +1,8 @@
+POST http://127.0.0.1:8000/user/
+Content-Type: application/json
+
+{
+  "username": "johndoe",
+  "email": "john@example.com",
+  "password": "strongpassword"
+}
