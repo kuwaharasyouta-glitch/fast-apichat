@@ -177,7 +177,6 @@ function loginUser(username, password) {
 
   socket.onerror = (error) => {
     console.error("WebSocketエラー:", error);
-    addMessage("エラー: 接続に問題が発生しました", "error-message");
   };
 
   socket.onclose = (event) => {
