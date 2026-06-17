@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
-from typing import Dict
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 import json
@@ -11,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db_setup import get_db
 from models import UserDb, MessageDb
+import os
+import aiohttp
+import asyncio
 
 app = FastAPI()
 
@@ -31,9 +33,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def get_index():
     return FileResponse("static/index.html")
 
-# ユーザー情報 (パソコンのメモリで管理。実際はデータベースに保存)
-users_db = {}  # {username: {"password": "hashed_password", "email": "...", ...}}
-
 # データモデル
 class UserCreate(BaseModel):
     username: str
@@ -48,6 +47,65 @@ class User(BaseModel):
 SECRET_KEY = "YOUR_SECRET_KEY"  # 秘密のカギ (実際はもっと安全な場所に保管)
 ALGORITHM = "HS256"  # 署名アルゴリズム
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # トークンの有効期限 (分)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+AI_USERNAME = "AI Assistant"
+
+async def generate_ai_response(message_text: str) -> str:
+    if not GEMINI_API_KEY:
+        return "APIキーが設定されていません。環境変数GEMINI_API_KEYを設定してください。"
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": GEMINI_API_KEY
+    }
+
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": message_text
+            }]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "topP": 0.9,
+            "maxOutputTokens": 200,
+        }
+    }
+
+    max_retries = 3
+    retry_delay = 2
+
+    for attempt in range(max_retries):
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(GEMINI_API_URL, headers=headers, json=payload) as response:
+                    if response.status == 200:
+                        result = await response.json()
+
+                        if "candidates" in result and len(result["candidates"]) > 0:
+                            candidate = result["candidates"][0]
+                            if "content" in candidate and "parts" in candidate["content"]:
+                                parts = candidate["content"]["parts"]
+                                if len(parts) > 0 and "text" in parts[0]:
+                                    return parts[0]["text"]
+
+                        return "申し訳ありません、応答を生成できませんでした。"
+
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+
+                    return f"AI応答の生成に失敗しました。ステータスコード: {response.status}"
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            return f"エラーが発生しました: {str(e)}"
+
+    return "応答の生成に失敗しました。しばらくしてからお試しください。"
 
 # パスワードをハッシュ化 (簡易版。実際はbcryptなどを使う)
 def fake_hash_password(password: str):
@@ -161,20 +219,46 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
 
+            # ユーザーメッセージをDB保存
             async for db in get_db():
                 message_db = MessageDb(
                     username=username,
                     content=data
-                )
+                 )
                 db.add(message_db)
                 await db.commit()
                 break
 
+            # ユーザーメッセージを送信
             await manager.broadcast_json({
                 "type": "message",
                 "username": username,
                 "content": data,
                 "timestamp": datetime.now().isoformat()
+            })
+
+            print("AI呼び出し前:", data)
+            # AI応答を生成
+            ai_response = await generate_ai_response(data)
+            print("AI呼び出し後:", ai_response)
+
+            # AI応答をDB保存
+            async for db in get_db():
+                ai_message_db = MessageDb(
+                    username=AI_USERNAME,
+                    content=ai_response
+                )
+                db.add(ai_message_db)
+                await db.commit()
+                break
+
+            # AI応答を送信
+            await manager.broadcast_json({
+                "type": "message",
+                "username": AI_USERNAME,
+                "content": ai_response,
+                "timestamp": datetime.now().isoformat(),
+                "is_ai": True
             })
 
     except WebSocketDisconnect:
