@@ -57,6 +57,9 @@ AI_USERNAME = "AI Assistant"
 async def generate_ai_response(message_text: str) -> str:
     print("generate_ai_response開始")
 
+    print("KEY:", "OK" if GEMINI_API_KEY else "NG")
+
+
     if not GEMINI_API_KEY:
         return "APIキーが設定されていません。"
 
@@ -271,7 +274,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # @AI のときだけAIを呼ぶ
             if is_ai_request:
+
+                print("AI呼び出し前:", prompt)
                 ai_response = await generate_ai_response(prompt)
+                print("AI呼び出し後:", ai_response)
 
                 async for db in get_db():
                     ai_message_db = MessageDb(
