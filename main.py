@@ -97,7 +97,8 @@ async def generate_ai_response(message_text: str) -> str:
                         await asyncio.sleep(retry_delay)
                         continue
 
-                    return f"AI応答の生成に失敗しました。ステータスコード: {response.status}"
+                    error_text = await response.text()
+                    return f"AI応答の生成に失敗しました。ステータスコード: {response.status} 内容: {error_text}"
 
         except Exception as e:
             if attempt < max_retries - 1:
