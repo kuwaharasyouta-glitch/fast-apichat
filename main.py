@@ -13,6 +13,9 @@ from models import UserDb, MessageDb
 import os
 import aiohttp
 import asyncio
+import socket
+import requests
+import time
 
 app = FastAPI()
 
@@ -52,61 +55,66 @@ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 AI_USERNAME = "AI Assistant"
 
 async def generate_ai_response(message_text: str) -> str:
+    print("generate_ai_response開始")
+
     if not GEMINI_API_KEY:
-        return "APIキーが設定されていません。環境変数GEMINI_API_KEYを設定してください。"
+        return "APIキーが設定されていません。"
 
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": GEMINI_API_KEY
-    }
+    def call_gemini():
+        print("call_gemini開始")
 
-    payload = {
-        "contents": [{
-            "parts": [{
-                "text": message_text
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "topP": 0.9,
-            "maxOutputTokens": 200,
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": GEMINI_API_KEY
         }
-    }
 
-    max_retries = 3
-    retry_delay = 2
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": message_text
+                }]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topP": 0.9,
+                "maxOutputTokens": 300,
+            }
+        }
 
-    for attempt in range(max_retries):
-        try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(GEMINI_API_URL, headers=headers, json=payload) as response:
-                    if response.status == 200:
-                        result = await response.json()
+        for attempt in range(3):
+            print("Geminiリクエスト:", attempt + 1)
 
-                        if "candidates" in result and len(result["candidates"]) > 0:
-                            candidate = result["candidates"][0]
-                            if "content" in candidate and "parts" in candidate["content"]:
-                                parts = candidate["content"]["parts"]
-                                if len(parts) > 0 and "text" in parts[0]:
-                                    return parts[0]["text"]
+            r = requests.post(
+                GEMINI_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=10
+            )
 
-                        return "申し訳ありません、応答を生成できませんでした。"
+            print("Geminiステータス:", r.status_code)
 
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay)
-                        continue
+            if r.status_code == 200:
+                result = r.json()
+                return result["candidates"][0]["content"]["parts"][0]["text"]
 
-                    error_text = await response.text()
-                    return f"AI応答の生成に失敗しました。ステータスコード: {response.status} 内容: {error_text}"
-
-        except Exception as e:
-            if attempt < max_retries - 1:
-                await asyncio.sleep(retry_delay)
+            if r.status_code == 503:
+                time.sleep(2)
                 continue
-            return f"エラーが発生しました: {str(e)}"
 
-    return "応答の生成に失敗しました。しばらくしてからお試しください。"
+            return f"AI応答の生成に失敗しました。\nステータスコード: {r.status_code}\n内容: {r.text}"
+
+        return "AIサーバーが混雑しています。少し待ってからもう一度送信してください。"
+
+    try:
+        result = await asyncio.to_thread(call_gemini)
+        print("generate_ai_response結果:", result)
+        return result
+    except requests.exceptions.Timeout:
+        return "AIの応答が時間内に返ってきませんでした。少し待ってから再送信してください。"
+    except requests.exceptions.RequestException as e:
+        return f"AI通信エラーが発生しました: {repr(e)}"
+    except Exception as e:
+        return f"AI処理中にエラーが発生しました: {repr(e)}"
 
 # パスワードをハッシュ化 (簡易版。実際はbcryptなどを使う)
 def fake_hash_password(password: str):
@@ -149,8 +157,18 @@ class WebSocketManager:
 
     async def broadcast_json(self, data: dict):
         json_str = json.dumps(data)
+        disconnected = []
+
         for username, connection in self.active_connections:
-            await connection.send_text(json_str)
+            try:
+                await connection.send_text(json_str)
+            except RuntimeError:
+                disconnected.append(connection)
+            except Exception:
+                disconnected.append(connection)
+
+        for connection in disconnected:
+            self.disconnect(connection)
 
 manager = WebSocketManager()
 
@@ -220,48 +238,58 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
 
+            is_ai_request = data.lower().startswith("@ai")
+       
+            if is_ai_request:
+                prompt = data[3:].strip()
+                display_data = data
+            else:
+                display_data = data
+
             # ユーザーメッセージをDB保存
             async for db in get_db():
                 message_db = MessageDb(
                     username=username,
                     content=data
-                 )
+                )
                 db.add(message_db)
                 await db.commit()
                 break
 
-            # ユーザーメッセージを送信
-            await manager.broadcast_json({
+            # @AIなら自分だけ、普通なら全員に表示
+            user_message = {
                 "type": "message",
                 "username": username,
-                "content": data,
+                "content": display_data,
                 "timestamp": datetime.now().isoformat()
-            })
+            }
 
-            print("AI呼び出し前:", data)
-            # AI応答を生成
-            ai_response = await generate_ai_response(data)
-            print("AI呼び出し後:", ai_response)
+            if is_ai_request:
+                await websocket.send_json(user_message)
+            else:
+                await manager.broadcast_json(user_message)
 
-            # AI応答をDB保存
-            async for db in get_db():
-                ai_message_db = MessageDb(
-                    username=AI_USERNAME,
-                    content=ai_response
-                )
-                db.add(ai_message_db)
-                await db.commit()
-                break
+            # @AI のときだけAIを呼ぶ
+            if is_ai_request:
+                ai_response = await generate_ai_response(prompt)
 
-            # AI応答を送信
-            await manager.broadcast_json({
-                "type": "message",
-                "username": AI_USERNAME,
-                "content": ai_response,
-                "timestamp": datetime.now().isoformat(),
-                "is_ai": True
-            })
+                async for db in get_db():
+                    ai_message_db = MessageDb(
+                        username=AI_USERNAME,
+                        content=ai_response
+                    )
+                    db.add(ai_message_db)
+                    await db.commit()
+                    break
 
+                # AI返答も自分だけに表示
+                await websocket.send_json({
+                    "type": "message",
+                    "username": AI_USERNAME,
+                    "content": ai_response,
+                    "timestamp": datetime.now().isoformat(),
+                    "is_ai": True
+                })
     except WebSocketDisconnect:
         if 'username' in locals():
             manager.disconnect(websocket)

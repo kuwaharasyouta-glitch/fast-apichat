@@ -59,15 +59,21 @@ function logout() {
 
 // メッセージ送信
 function sendMessage(messageText) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    alert("WebSocket接続がありません。");
+  if (!socket) {
+    alert("WebSocket接続がありません。もう一度ログインしてください。");
+    showLogin();
     return;
   }
 
-  // メッセージ送信のみを行う（表示は行わない - サーバーからのブロードキャストで表示される）
+  if (socket.readyState !== WebSocket.OPEN) {
+    alert("WebSocket接続が開いていません。もう一度ログインしてください。");
+    socket = null;
+    showLogin();
+    return;
+  }
+
   socket.send(messageText);
 
-  // 入力フィールドをクリア
   const messageInput = document.getElementById("messageInput");
   if (messageInput) messageInput.value = "";
 }
@@ -181,11 +187,14 @@ function loginUser(username, password) {
 
   socket.onclose = (event) => {
     console.log("WebSocket切断:", event);
+    socket = null;
+
     if (event.code === 1008) {
       alert("認証エラー: " + event.reason);
+      showLogin();
     } else if (event.code !== 1000) {
-      // 正常終了以外の場合
-      
+      alert("WebSocket接続が切れました。もう一度ログインしてください。");
+      showLogin();
     }
   };
 }
