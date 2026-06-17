@@ -55,10 +55,7 @@ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 AI_USERNAME = "AI Assistant"
 
 async def generate_ai_response(message_text: str) -> str:
-    print("generate_ai_response開始")
-
-    print("KEY:", "OK" if GEMINI_API_KEY else "NG")
-
+    print(repr(GEMINI_API_KEY[:20]))
 
     if not GEMINI_API_KEY:
         return "APIキーが設定されていません。"
