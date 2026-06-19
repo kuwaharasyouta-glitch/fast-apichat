@@ -86,6 +86,10 @@ async def generate_ai_response(message_text: str) -> str:
 
             if r.status_code == 200:
                 result = r.json()
+
+                print("Gemini応答:")
+                print(json.dumps(result,indent=2,ensure_ascii=False))
+                
                 return result["candidates"][0]["content"]["parts"][0]["text"]
 
             if r.status_code == 503:
