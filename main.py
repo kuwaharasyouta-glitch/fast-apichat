@@ -72,6 +72,9 @@ async def generate_ai_response(message_text: str) -> str:
                 "temperature": 0.7,
                 "topP": 0.9,
                 "maxOutputTokens": 1000,
+                "thinkingConfig":{
+                    "thinkingBudget":0
+                }
             }
         }
 
