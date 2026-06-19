@@ -88,7 +88,7 @@ async def generate_ai_response(message_text: str) -> str:
                 GEMINI_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=10
+                timeout=30
             )
 
             print("Geminiステータス:", r.status_code)
