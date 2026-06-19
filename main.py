@@ -53,14 +53,10 @@ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 AI_USERNAME = "AI Assistant"
 
 async def generate_ai_response(message_text: str) -> str:
-    print("KEY=", repr(GEMINI_API_KEY[:20]))
-
     if not GEMINI_API_KEY:
         return "APIキーが設定されていません。"
 
     def call_gemini():
-        print("call_gemini開始")
-
         headers = {
             "Content-Type": "application/json",
             "X-goog-api-key": GEMINI_API_KEY
@@ -75,21 +71,18 @@ async def generate_ai_response(message_text: str) -> str:
             "generationConfig": {
                 "temperature": 0.7,
                 "topP": 0.9,
-                "maxOutputTokens": 300,
+                "maxOutputTokens": 1000,
             }
         }
 
         for attempt in range(3):
-            print("Geminiリクエスト:", attempt + 1)
-
+ 
             r = requests.post(
                 GEMINI_API_URL,
                 headers=headers,
                 json=payload,
                 timeout=60
             )
-
-            print("Geminiステータス:", r.status_code)
 
             if r.status_code == 200:
                 result = r.json()
@@ -106,7 +99,6 @@ async def generate_ai_response(message_text: str) -> str:
 
     try:
         result = await asyncio.to_thread(call_gemini)
-        print("generate_ai_response結果:", result)
         return result
     except requests.exceptions.Timeout:
         return "AIの応答が時間内に返ってきませんでした。少し待ってから再送信してください。"
