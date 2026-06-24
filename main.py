@@ -65,7 +65,14 @@ async def generate_ai_response(message_text: str) -> str:
         payload = {
             "contents": [{
                 "parts": [{
-                    "text": message_text
+                    "text": f"""
+        挨拶には自然に挨拶を返してください。
+        質問には簡潔に回答してください。
+        回答は200文字以内にしてください。
+
+        ユーザー:
+        {message_text}
+        """
                 }]
             }],
             "generationConfig": {
